@@ -144,6 +144,14 @@ public abstract class ModLoaderShared<T> {
 
 		String modname = modInfo.getFileName().toString().replaceAll("\\.properties$", "");
 		
+		Path configFile = Paths.get("mods", modname + ".config");
+		if (Files.exists(configFile)) {
+			try (InputStream inputStream = Files.newInputStream(configFile)) {
+				logger.log(Level.INFO, "Loading " + configFile.toString());
+				properties.load(inputStream);
+			}
+		}
+		
 		final String className = properties.getProperty("classname");
 		if (className == null) {
 			throw new IOException("Missing property classname for mod " + modInfo);
