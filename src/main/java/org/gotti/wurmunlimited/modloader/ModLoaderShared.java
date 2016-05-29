@@ -7,9 +7,14 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.DirectoryStream;
+import java.nio.file.FileSystem;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.PathMatcher;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -18,6 +23,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
+import org.gotti.wurmunlimited.modloader.classhooks.HookException;
 import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
 import org.gotti.wurmunlimited.modloader.interfaces.Configurable;
 import org.gotti.wurmunlimited.modloader.interfaces.Initable;
@@ -158,7 +164,7 @@ public abstract class ModLoaderShared<T> {
 		}
 		
 		try {
-			Loader loader = HookManager.getInstance().getLoader();;
+			Loader loader = HookManager.getInstance().getLoader();
 			final String classpath = properties.getProperty("classpath");
 
 			final ClassLoader classloader;
@@ -175,28 +181,52 @@ public abstract class ModLoaderShared<T> {
 		}
 	}
 	
-	private ClassLoader createClassLoader(String modname, String classpath, Loader parent, Boolean shared) throws MalformedURLException, NotFoundException {
+	private List<Path> getClassLoaderEntries(String modname, String classpath) {
+		List<Path> pathEntries = new ArrayList<>();
 		
 		String[] entries = classpath.split(",");
-		
-		List<URL> urls = new ArrayList<>();
-		
 		for (String entry : entries) {
-			Path path = Paths.get("mods", modname, entry);
-			if (!Files.isRegularFile(path) && !Files.isDirectory(path)) {
-				throw new MalformedURLException("Missing classpath entry " + path.toString());
-			}
+			Path modPath = Paths.get("mods", modname);
 			
-			if (shared) {
-				HookManager.getInstance().getClassPool().appendClassPath(path.toString());
-			} else {
-				urls.add(path.toUri().toURL());
+			FileSystem fs = modPath.getFileSystem();
+			final PathMatcher matcher = fs.getPathMatcher("glob:" + entry);
+			SimpleFileVisitor<Path> visitor = new SimpleFileVisitor<Path>() {
+				
+				@Override
+				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+					Path p = modPath.relativize(file);
+					if (matcher.matches(p)) {
+						pathEntries.add(file);
+					}
+					return FileVisitResult.CONTINUE;
+				}
+			};
+			
+			try {
+				Files.walkFileTree(modPath, visitor);
+			} catch (IOException e) {
+				throw new HookException(e);
 			}
 		}
 		
+		return pathEntries;
+	}
+	
+	private ClassLoader createClassLoader(String modname, String classpath, Loader parent, Boolean shared) throws MalformedURLException, NotFoundException {
+		List<Path> pathEntries = getClassLoaderEntries(modname, classpath);
+		logger.log(Level.INFO, "Classpath: " + pathEntries.toString());
+		
 		if (shared) {
+			final ClassPool classPool = HookManager.getInstance().getClassPool();
+			for (Path path : pathEntries) {
+				classPool.appendClassPath(path.toString());
+			}
 			return parent;
 		} else {
+			List<URL> urls = new ArrayList<>();
+			for (Path path : pathEntries) {
+				urls.add(path.toUri().toURL());
+			}
 			return new URLClassLoader(urls.toArray(new URL[urls.size()]), parent);
 		}
 	}
