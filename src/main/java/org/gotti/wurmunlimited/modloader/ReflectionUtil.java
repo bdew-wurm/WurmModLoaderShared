@@ -43,9 +43,15 @@ public final class ReflectionUtil {
 	}
 
 	public static Method getMethod(Class<?> clazz, String methodName) throws NoSuchMethodException {
+		return getMethod(clazz, methodName, null);
+	}
+	
+	public static Method getMethod(Class<?> clazz, String methodName, Class<?>[] signature) throws NoSuchMethodException {
 		for (Method method : getAllMethods(clazz)) {
 			if (method.getName().equals(methodName)) {
-				return method;
+				if (signature == null || Arrays.equals(signature, method.getParameterTypes())) {
+					return method;
+				}
 			}
 		}
 		throw new NoSuchMethodException(methodName);
