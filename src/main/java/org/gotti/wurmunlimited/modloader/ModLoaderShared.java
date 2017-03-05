@@ -3,6 +3,8 @@ package org.gotti.wurmunlimited.modloader;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -16,7 +18,6 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Properties;
 import java.util.logging.Level;
@@ -78,12 +79,15 @@ public abstract class ModLoaderShared<T> {
 		List<Entry> mods = new ArrayList<Entry>();
 		
 		logger.info(String.format("ModLoader version %1$s", this.getClass().getPackage().getImplementationVersion()));
+		
+		String steamVersion = getSteamVersion();
 
 		try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(modDir, "*.properties")) {
 			for (Path modInfo : directoryStream) {
 				logger.log(Level.INFO, "Loading " + modInfo.toString());
 				try (EarlyLoadingChecker c = initEarlyLoadingChecker(modInfo.getFileName().toString().replaceAll("\\.properties$", ""), "load")) {
 					Entry mod = loadModFromInfo(modInfo);
+					mod.getProperties().put("steamVersion", steamVersion);
 					mods.add(mod);
 				}
 			}
@@ -238,32 +242,18 @@ public abstract class ModLoaderShared<T> {
 	
 	private EarlyLoadingChecker initEarlyLoadingChecker(String modname, String phase) {
 
-		final List<String> earlyLoaded = new LinkedList<>();
+		AddToListTranslator translator = new AddToListTranslator(paramString -> paramString.startsWith("com.wurmonline.") && !paramString.endsWith("Exception"));
 		
 		try {
-			HookManager.getInstance().getLoader().addTranslator(HookManager.getInstance().getClassPool(), new Translator() {
-
-				@Override
-				public void start(ClassPool paramClassPool) throws NotFoundException, CannotCompileException {
-				}
-				
-				@Override
-				public void onLoad(ClassPool paramClassPool, String paramString) throws NotFoundException, CannotCompileException {
-					if (paramString.startsWith("com.wurmonline.") && !paramString.endsWith("Exception")) {
-						earlyLoaded.add(paramString);
-					}
-				}
-			});
+			HookManager.getInstance().getLoader().addTranslator(HookManager.getInstance().getClassPool(), translator);
 			
 			return new EarlyLoadingChecker() {
 				
 				@Override
 				public void close() {
 					
-					if (!earlyLoaded.isEmpty()) {
-						for (String classname : earlyLoaded) {
-							logger.log(Level.WARNING, String.format("Mod %1$s loaded server class %3$s during phase %2$s", modname, phase, classname));
-						}
+					for (String classname : translator.getLoadedClasses()) {
+						logger.log(Level.WARNING, String.format("Mod %1$s loaded server class %3$s during phase %2$s", modname, phase, classname));
 					}
 					
 					try {
@@ -287,4 +277,16 @@ public abstract class ModLoaderShared<T> {
 		public void onLoad(ClassPool paramClassPool, String paramString) throws NotFoundException, CannotCompileException {
 		}
 	};
+	
+	private String getSteamVersion() {
+		final ClassPool classPool = HookManager.getInstance().getClassPool();
+		
+		try (DefrostingClassLoader loader = new DefrostingClassLoader(classPool)) {
+			final Class<?> clazz = loader.loadClass("com.wurmonline.shared.constants.SteamVersion");
+			final Method getCurrentVersion = ReflectionUtil.getMethod(clazz, "getCurrentVersion");
+			return getCurrentVersion.invoke(clazz).toString();
+		} catch (NotFoundException | CannotCompileException | ClassNotFoundException | NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+			throw new HookException(e);
+		}
+	}
 }
