@@ -7,6 +7,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -15,6 +16,8 @@ import java.util.jar.Attributes;
 import java.util.jar.Attributes.Name;
 import java.util.jar.Manifest;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javassist.CannotCompileException;
 import javassist.ClassPool;
@@ -105,6 +108,39 @@ public class HookManager {
 				}
 				
 				return super.findClass(name);
+			}
+			
+			//
+			// Some javax.* packages are not part of the JDK and must be loaded from the modloader classpath.
+			// We look for classes in the parent classpath first. If we found the class from a javax
+			// package we store the package name in a set of system provided javax packages. All classes
+			// from those packages are always resolved from the parent classpath.
+			// if a class from a javax. package is not found null is returned instead of a ClassNotFound
+			// exception to continue searching for the class in the modloader classpath.
+			//
+			// The special treatment does only apply to mods with sharedClassLoader. The javax packages
+			// are resolved without problems if the mod has its own classloader.
+			//
+			private final Set<String> delegateJavaXPackages = Collections.synchronizedSet(new HashSet<>());
+			private final Pattern javaxPackagePattern = Pattern.compile("^(?<pkg>javax\\.[^.]+)\\..*$");
+			protected Class<?> delegateToParent(String classname) throws ClassNotFoundException {
+				Matcher matcher = javaxPackagePattern.matcher(classname);
+				if (!matcher.matches()) {
+					return super.delegateToParent(classname);
+				}
+				
+				String javaxPackage = matcher.group("pkg");
+				if (delegateJavaXPackages.contains(javaxPackage)) {
+					return super.delegateToParent(classname);
+				}
+				
+				try {
+					Class<?> c = super.delegateToParent(classname);
+					delegateJavaXPackages.add(javaxPackage);
+					return c;
+				} catch (ClassNotFoundException e) {
+					return null;
+				}
 			}
 		};
 	}
