@@ -5,7 +5,7 @@
 	<groupId>org.gotti.wurmunlimited</groupId>
 	<artifactId>modloader-shared</artifactId>
 	<packaging>jar</packaging>
-	<version>0.7-SNAPSHOT</version>
+	<version>0.7</version>
 
 	<name>shared modloader code</name>
 
