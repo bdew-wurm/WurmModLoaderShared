@@ -19,6 +19,8 @@ import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.gotti.wurmunlimited.modloader.callbacks.Callbacks;
+
 import javassist.CannotCompileException;
 import javassist.ClassPool;
 import javassist.CtClass;
@@ -40,6 +42,9 @@ public class HookManager {
 
 	// Instance
 	private static HookManager instance;
+
+	// Callbacks
+	private Callbacks callbacks;
 	
 	private static final Logger LOG = Logger.getLogger(HookManager.class.getName());
 
@@ -143,6 +148,7 @@ public class HookManager {
 				}
 			}
 		};
+		callbacks = new Callbacks(loader, classPool);
 	}
 
 	public static synchronized HookManager getInstance() {
@@ -347,5 +353,17 @@ public class HookManager {
 			}
 			throw new HookException(e);
 		}
+	}
+	
+	public static <T> T getCallback(String callbackId) {
+		return getInstance().callbacks.getCallback(callbackId);
+	}
+	
+	public void addCallback(CtClass targetClass, String callbackName, Object callbackTarget) {
+		callbacks.addCallback(targetClass, callbackName, callbackTarget);
+	}
+	
+	public void initCallbacks() {
+		callbacks.init();
 	}
 }
