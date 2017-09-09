@@ -1,5 +1,6 @@
 package org.gotti.wurmunlimited.modloader;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -88,6 +89,14 @@ public final class ReflectionUtil {
 			method.setAccessible(isAccesible);
 		}
 	}
-
 	
+	public static <T> T callPrivateConstructor(Constructor<T> constructor, Object... args) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
+		boolean isAccesible = constructor.isAccessible();
+		constructor.setAccessible(true);
+		try {
+			return constructor.newInstance(args);
+		} finally {
+			constructor.setAccessible(isAccesible);
+		}
+	}
 }
