@@ -19,6 +19,9 @@ public class DependencyEntry {
 	
 	// Set of entries to initialize after this.
 	private final Set<String> after = new HashSet<>();
+
+	// Load element only if it's requested by another element
+	private final boolean onDemand;
 	
 	protected DependencyEntry(DependencyProvider entry) {
 		this.name = entry.getName();
@@ -29,6 +32,8 @@ public class DependencyEntry {
 		this.before.addAll(this.requires);
 		this.before.addAll(entry.getBefore());
 		this.after.addAll(entry.getAfter());
+		
+		this.onDemand = entry.isOnDemand();
 	}
 	
 	protected static String parse(String input) {
@@ -72,4 +77,9 @@ public class DependencyEntry {
 	public String toString() {
 		return getName();
 	}
+
+	public boolean isOnDemand() {
+		return onDemand;
+	}
+	
 }

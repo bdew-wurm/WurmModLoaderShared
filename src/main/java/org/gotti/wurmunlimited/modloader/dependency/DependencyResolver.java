@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class DependencyResolver<T extends DependencyProvider> {
@@ -34,8 +35,12 @@ public class DependencyResolver<T extends DependencyProvider> {
 		
 		checkRequires(entries);
 		checkConflicts(entries);
+		removeMissing(entries);
+		removeSelfReference(entries);
 		resolveAfter(entries);
 		resolveBefore(entries);
+		
+		do {} while (pruneOnDemand(entries));
 		
 		List<DependencyEntry> order = resolveOrder(entries);
 		return order.stream().map(DependencyEntry::getName).map(byName::get).collect(Collectors.toList());
@@ -108,17 +113,43 @@ public class DependencyResolver<T extends DependencyProvider> {
 	
 	private void resolveAfter(Map<String, DependencyEntry> entries) {
 		for (DependencyEntry mod : entries.values()) {
-			mod.getAfter().removeIf(mod.getName()::equals);
-			mod.getAfter().removeIf(dependency -> !entries.containsKey(dependency));
 			mod.getAfter().forEach(info -> entries.get(info).addBefore(mod.getName()));
 		}
 	}
 	
 	private void resolveBefore(Map<String, DependencyEntry> entries) {
 		for (DependencyEntry mod : entries.values()) {
-			mod.getBefore().removeIf(mod.getName()::equals);
-			mod.getBefore().removeIf(dependency -> !entries.containsKey(dependency));
 			mod.getBefore().forEach(info -> entries.get(info).addAfter(mod.getName()));
 		}
+	}
+	
+	private void removeSelfReference(Map<String, DependencyEntry> entries) {
+		for (DependencyEntry mod : entries.values()) {
+			String name = mod.getName();
+			mod.getBefore().removeIf(name::equals);
+			mod.getAfter().removeIf(name::equals);
+		}
+	}
+	
+	private void removeMissing(Map<String, DependencyEntry> entries) {
+		final Predicate<String> present = entries::containsKey;
+		final Predicate<String> missing = present.negate();
+		for (DependencyEntry mod : entries.values()) {
+			mod.getBefore().removeIf(missing);
+			mod.getAfter().removeIf(missing);
+		}
+	}
+	
+	private boolean pruneOnDemand(Map<String, DependencyEntry> entries) {
+		final Set<String> toRemove = new HashSet<>();
+		for (DependencyEntry mod : entries.values()) {
+			if (mod.isOnDemand() && mod.getAfter().isEmpty()) {
+				for (String before : mod.getBefore()) {
+					entries.get(before).getAfter().remove(mod.getName());
+				}
+				toRemove.add(mod.getName());
+			}
+		}
+		return entries.keySet().removeAll(toRemove);
 	}
 }

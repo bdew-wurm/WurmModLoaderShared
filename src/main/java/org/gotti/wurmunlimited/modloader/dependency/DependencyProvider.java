@@ -25,5 +25,10 @@ public interface DependencyProvider {
 	 * Entities that should appear after this entry.
 	 */
 	Collection<String> getAfter();
+	
+	/**
+	 * Load entity only if it's demanded by other entities.
+	 */
+	boolean isOnDemand();
 
 }

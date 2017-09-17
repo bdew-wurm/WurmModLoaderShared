@@ -20,6 +20,7 @@ public class DependencyResolverTest {
 		private Collection<String> conflicts = Collections.emptyList();;
 		private Collection<String> before = Collections.emptyList();
 		private Collection<String> after = Collections.emptyList();
+		private boolean onDemand = false;
 		
 		public Entry(String name) {
 			this.name = name;
@@ -48,6 +49,11 @@ public class DependencyResolverTest {
 		@Override
 		public Collection<String> getAfter() {
 			return after;
+		}
+		
+		@Override
+		public boolean isOnDemand() {
+			return onDemand;
 		}
 	}
 
@@ -167,7 +173,13 @@ public class DependencyResolverTest {
 		Assertions.assertThat(result).extracting("name").containsExactly("A", "B", "C");
 	}
 	
-	
-	
-
+	@Test
+	public void testOnDemand() {
+		a.onDemand = true;
+		b.onDemand = true;
+		a.requires = Collections.singleton("B");
+		c.requires = Collections.singleton("B");
+		List<DependencyProvider> result = new DependencyResolver<>().order(Arrays.asList(c, a, b));
+		Assertions.assertThat(result).extracting("name").containsExactly("B", "C");
+	}
 }

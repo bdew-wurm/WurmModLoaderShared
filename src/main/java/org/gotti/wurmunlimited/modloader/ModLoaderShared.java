@@ -85,6 +85,10 @@ public abstract class ModLoaderShared<T extends Versioned> {
 		public Collection<String> getAfter() {
 			return parseList(properties.getProperty("depend.precedes", ""));
 		}
+		@Override
+		public boolean isOnDemand() {
+			return Boolean.parseBoolean(properties.getProperty("depend.ondemand", "false"));
+		}
 		
 		private List<String> parseList(String list) {
 			return Arrays.stream(list.split(","))
