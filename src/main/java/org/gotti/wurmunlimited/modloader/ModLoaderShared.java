@@ -18,6 +18,9 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.logging.Level;
@@ -26,11 +29,14 @@ import java.util.stream.Collectors;
 
 import org.gotti.wurmunlimited.modloader.classhooks.HookException;
 import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
+import org.gotti.wurmunlimited.modloader.dependency.DependencyProvider;
+import org.gotti.wurmunlimited.modloader.dependency.DependencyResolver;
 import org.gotti.wurmunlimited.modloader.interfaces.Configurable;
 import org.gotti.wurmunlimited.modloader.interfaces.Initable;
 import org.gotti.wurmunlimited.modloader.interfaces.ModEntry;
 import org.gotti.wurmunlimited.modloader.interfaces.ModListener;
 import org.gotti.wurmunlimited.modloader.interfaces.PreInitable;
+import org.gotti.wurmunlimited.modloader.interfaces.Versioned;
 
 import javassist.CannotCompileException;
 import javassist.ClassPool;
@@ -38,11 +44,11 @@ import javassist.Loader;
 import javassist.NotFoundException;
 import javassist.Translator;
 
-public abstract class ModLoaderShared<T> {
+public abstract class ModLoaderShared<T extends Versioned> {
 	
 	private static Logger logger = Logger.getLogger(ModLoaderShared.class.getName());
 	
-	private class Entry implements ModEntry<T> {
+	private class Entry implements ModEntry<T>, DependencyProvider {
 		private T mod;
 		private Properties properties;
 		private String name;
@@ -63,6 +69,29 @@ public abstract class ModLoaderShared<T> {
 		public T getWurmMod() {
 			return mod;
 		}
+		@Override
+		public Collection<String> getRequires() {
+			return parseList(properties.getProperty("depend.requires", ""));
+		}
+		@Override
+		public Collection<String> getConflicts() {
+			return parseList(properties.getProperty("depend.conflicts", ""));
+		}
+		@Override
+		public Collection<String> getBefore() {
+			return parseList(properties.getProperty("depend.suggests", ""));
+		}
+		@Override
+		public Collection<String> getAfter() {
+			return parseList(properties.getProperty("depend.precedes", ""));
+		}
+		
+		private List<String> parseList(String list) {
+			return Arrays.stream(list.split(","))
+					.map(String::trim)
+					.filter(string -> !string.isEmpty())
+					.collect(Collectors.toList());
+		}
 	}
 
 	private Class<? extends T> modClass;
@@ -76,9 +105,15 @@ public abstract class ModLoaderShared<T> {
 	protected abstract void init();
 
 	public List<T> loadModsFromModDir(Path modDir) throws IOException {
-		List<Entry> mods = new ArrayList<Entry>();
+		final List<Entry> unorderedMods = new ArrayList<Entry>();
 		
-		logger.info(String.format("ModLoader version %1$s", this.getClass().getPackage().getImplementationVersion()));
+		final String version = this.getClass().getPackage().getImplementationVersion();
+		logger.info(String.format("ModLoader version %1$s", version));
+		
+		String modLoaderProvided = "modloader";
+		if (version != null && !version.isEmpty()) {
+			modLoaderProvided += "@" + version;
+		}
 		
 		String steamVersion = getSteamVersion();
 
@@ -87,11 +122,14 @@ public abstract class ModLoaderShared<T> {
 				logger.log(Level.INFO, "Loading " + modInfo.toString());
 				try (EarlyLoadingChecker c = initEarlyLoadingChecker(modInfo.getFileName().toString().replaceAll("\\.properties$", ""), "load")) {
 					Entry mod = loadModFromInfo(modInfo);
+					
 					mod.getProperties().put("steamVersion", steamVersion);
-					mods.add(mod);
+					unorderedMods.add(mod);
 				}
 			}
 		}
+		
+		List<Entry> mods = new DependencyResolver<Entry>().provided(Collections.singleton(modLoaderProvided)).order(unorderedMods);
 		
 		// new style mods with initable will do configure, preInit, init
 		mods.stream().filter(modEntry -> (modEntry.mod instanceof Initable || modEntry.mod instanceof PreInitable) && modEntry.mod instanceof Configurable).forEach(modEntry -> {
@@ -128,7 +166,7 @@ public abstract class ModLoaderShared<T> {
 			});
 
 		mods.stream().forEach(modEntry -> {
-			String implementationVersion = modEntry.mod.getClass().getPackage().getImplementationVersion();
+			String implementationVersion = modEntry.mod.getVersion();
 			if (implementationVersion == null || implementationVersion.isEmpty()) {
 				implementationVersion = "unversioned";
 			}
