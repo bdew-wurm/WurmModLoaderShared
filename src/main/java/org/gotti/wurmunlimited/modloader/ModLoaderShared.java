@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
@@ -123,7 +124,12 @@ public abstract class ModLoaderShared<T extends Versioned> {
 			modLoaderProvided += "@" + version;
 		}
 		
+		Set<String> provided = new LinkedHashSet<>();
+		provided.add(modLoaderProvided);
+		
 		String steamVersion = getSteamVersion();
+		provided.add("wurmunlimited@" + steamVersion);
+		logger.info(String.format("Game version %1$s", steamVersion));
 		
 		// Discover installed (and possibly enabled) mods from modDir
 		final List<ModInfo> unorderedMods = discoverMods(modDir);
@@ -135,6 +141,14 @@ public abstract class ModLoaderShared<T extends Versioned> {
 				return new Entry(entryBuilder.createModInstance(modInfo), modInfo.getProperties(), modInfo.getName());
 			}
 		}).collect(Collectors.toList());
+		
+		mods.stream().forEach(modEntry -> {
+			String implementationVersion = modEntry.mod.getVersion();
+			if (implementationVersion == null || implementationVersion.isEmpty()) {
+				implementationVersion = "unversioned";
+			}
+			logger.info(String.format("Loading %1$s as %2$s (%3$s)", modEntry.mod.getClass().getName(),  modEntry.getName(), implementationVersion));
+		});
 		
 		// new style mods with initable will do configure, preInit, init
 		mods.stream().filter(modEntry -> (modEntry.mod instanceof Initable || modEntry.mod instanceof PreInitable) && modEntry.mod instanceof Configurable).forEach(modEntry -> {
@@ -169,14 +183,6 @@ public abstract class ModLoaderShared<T extends Versioned> {
 				((Configurable) modEntry.mod).configure(modEntry.getProperties());
 				}
 			});
-
-		mods.stream().forEach(modEntry -> {
-			String implementationVersion = modEntry.mod.getVersion();
-			if (implementationVersion == null || implementationVersion.isEmpty()) {
-				implementationVersion = "unversioned";
-			}
-			logger.info(String.format("Loaded %1$s as %2$s (%3$s)", modEntry.mod.getClass().getName(),  modEntry.getName(), implementationVersion));
-		});
 		
 		// Send the list of initialized mods to all modlisteners
 		mods.stream().filter(modEntry -> modEntry.mod instanceof ModListener).forEach(modEntry -> {
@@ -200,7 +206,7 @@ public abstract class ModLoaderShared<T extends Versioned> {
 		try (FileSystem fs = FileSystems.newFileSystem(URI.create("jar:" + jarFile.toUri()), new HashMap<>())) {
 			Path propsFile = fs.getPath("/META-INF/" + ModLoaderShared.class.getPackage().getName() + "/" + modName + ".properties");
 			if (Files.exists(propsFile)) {
-				logger.log(Level.INFO, "Loading " + jarFile.toString());
+				logger.log(Level.INFO, "Reading " + jarFile.toString() + "!" + propsFile.toString());
 				try (InputStream inputStream = Files.newInputStream(propsFile)) {
 					Properties properties = new Properties();
 					properties.load(inputStream);
@@ -231,7 +237,7 @@ public abstract class ModLoaderShared<T extends Versioned> {
 		}
 
 		if (modInfo != null) {
-			logger.log(Level.INFO, "Loading " + modInfo.toString());
+			logger.log(Level.INFO, "Reading " + modInfo.toString());
 			try (InputStream inputStream = Files.newInputStream(modInfo)) {
 				properties.load(inputStream);
 			}
@@ -240,7 +246,7 @@ public abstract class ModLoaderShared<T extends Versioned> {
 		Path configFile = Paths.get("mods", modName + ".config");
 		if (Files.exists(configFile)) {
 			try (InputStream inputStream = Files.newInputStream(configFile)) {
-				logger.log(Level.INFO, "Loading " + configFile.toString());
+				logger.log(Level.INFO, "Reading " + configFile.toString());
 				properties.load(inputStream);
 			}
 		}
