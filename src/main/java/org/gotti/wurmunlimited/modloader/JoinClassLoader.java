@@ -21,7 +21,6 @@ import java.util.Vector;
 
 /**
  * A class loader that combines multiple class loaders into one.<br>
- * The classes loaded by this class loader are associated with this class loader, i.e. Class.getClassLoader() points to this class loader.
  */
 class JoinClassLoader extends ClassLoader {
 
@@ -33,6 +32,12 @@ class JoinClassLoader extends ClassLoader {
 	}
 
 	protected Class<?> findClass(String name) throws ClassNotFoundException {
+		for (ClassLoader delegate : delegateClassLoaders) {
+			try {
+				return delegate.loadClass(name);
+			} catch (ClassNotFoundException e) {
+			}
+		}
 		// It would be easier to call the loadClass() methods of the delegateClassLoaders
 		// here, but we have to load the class from the byte code ourselves, because we
 		// need it to be associated with our class loader.
