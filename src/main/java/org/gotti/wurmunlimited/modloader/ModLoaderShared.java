@@ -37,7 +37,7 @@ import javassist.CannotCompileException;
 import javassist.ClassPool;
 import javassist.NotFoundException;
 
-public abstract class ModLoaderShared<T extends Versioned> {
+public abstract class ModLoaderShared<T extends Versioned> implements Versioned {
 	
 	private static Logger logger = Logger.getLogger(ModLoaderShared.class.getName());
 	
@@ -115,8 +115,8 @@ public abstract class ModLoaderShared<T extends Versioned> {
 		return unorderedMods;
 	}
 	
-	public List<T> loadModsFromModDir(Path modDir) throws IOException {
-		final String version = this.getClass().getPackage().getImplementationVersion();
+	public List<? extends ModEntry<T>> loadModsFromModDir(Path modDir) throws IOException {
+		final String version = this.getVersion();
 		logger.info(String.format("ModLoader version %1$s", version));
 		
 		String modLoaderProvided = "modloader";
@@ -127,7 +127,7 @@ public abstract class ModLoaderShared<T extends Versioned> {
 		Set<String> provided = new LinkedHashSet<>();
 		provided.add(modLoaderProvided);
 		
-		String steamVersion = getSteamVersion();
+		String steamVersion = getGameVersion();
 		provided.add("wurmunlimited@" + steamVersion);
 		logger.info(String.format("Game version %1$s", steamVersion));
 		
@@ -191,7 +191,8 @@ public abstract class ModLoaderShared<T extends Versioned> {
 				}
 			});
 		
-		return mods.stream().map(modEntry -> modEntry.mod).collect(Collectors.toList());
+		
+		return mods;
 	}
 	
 	/**
@@ -258,7 +259,7 @@ public abstract class ModLoaderShared<T extends Versioned> {
 	 * Get the server version as announced on steam
 	 * @return Steam game version
 	 */
-	private String getSteamVersion() {
+	public String getGameVersion() {
 		final ClassPool classPool = HookManager.getInstance().getClassPool();
 		
 		try (DefrostingClassLoader loader = new DefrostingClassLoader(classPool)) {
