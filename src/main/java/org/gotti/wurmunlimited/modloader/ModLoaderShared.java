@@ -221,6 +221,25 @@ public abstract class ModLoaderShared<T extends Versioned> implements Versioned 
 	}
 	
 	/**
+	 * Extract the packaged config file
+	 * @param modName Mod name
+	 * @param jarFile Mod jar
+	 * @param configFile Target config file
+	 * @throws IOException
+	 */
+	private void copyConfigFromJar(String modName, Path jarFile, Path configFile) throws IOException {
+		try (FileSystem fs = FileSystems.newFileSystem(URI.create("jar:" + jarFile.toUri()), new HashMap<>())) {
+			Path configTemplate = fs.getPath("/META-INF/" + ModLoaderShared.class.getPackage().getName() + "/" + modName + ".config");
+			if (Files.exists(configTemplate)) {
+				logger.log(Level.INFO, "Copying " + jarFile + "!" + configTemplate + " to " + configFile);
+				Files.copy(configTemplate, configFile);
+			}
+		} catch (IOException e) {
+			logger.log(Level.WARNING, e.getMessage(), e);
+		}
+	}
+	
+	/**
 	 * Load mod properties from .properties and .config files
 	 * @param modName Modname
 	 * @param modInfo properties file
@@ -229,12 +248,18 @@ public abstract class ModLoaderShared<T extends Versioned> implements Versioned 
 	 * @throws IOException
 	 */
 	private ModInfo loadModFromInfo(String modName, Path modInfo, Path jarFile) throws IOException {
+		Path configFile = Paths.get("mods", modName + ".config");
+		
 		Properties properties = new Properties();
 		if (jarFile != null && Files.exists(jarFile)) {
 			if (modInfo == null || !Files.exists(modInfo)) {
 				properties.put("depend.ondemand", "true");
 			}
 			properties.putAll(loadDefaultPropertiesFromJar(modName, jarFile));
+			
+			if (!Files.exists(configFile)) {
+				copyConfigFromJar(modName, jarFile, configFile);
+			}
 		}
 
 		if (modInfo != null) {
@@ -244,7 +269,6 @@ public abstract class ModLoaderShared<T extends Versioned> implements Versioned 
 			}
 		}
 
-		Path configFile = Paths.get("mods", modName + ".config");
 		if (Files.exists(configFile)) {
 			try (InputStream inputStream = Files.newInputStream(configFile)) {
 				logger.log(Level.INFO, "Reading " + configFile.toString());
