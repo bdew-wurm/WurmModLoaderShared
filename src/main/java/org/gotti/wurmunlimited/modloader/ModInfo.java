@@ -50,7 +50,12 @@ class ModInfo implements DependencyProvider {
 	public Collection<String> getImport() {
 		return parseList(getProperties().getProperty("depend.import", ""));
 	}
-	
+	public boolean isSharedClassLoader() {
+		return Boolean.parseBoolean(getProperties().getProperty("sharedClassLoader", "false"));
+	}
+	public String classPath() {
+		return properties.getProperty("classpath");
+	}
 	private List<String> parseList(String list) {
 		return Arrays.stream(list.split(","))
 				.map(String::trim)

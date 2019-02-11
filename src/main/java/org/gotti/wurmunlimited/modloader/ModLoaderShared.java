@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.gotti.wurmunlimited.modloader.classhooks.HookException;
 import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
@@ -135,7 +136,14 @@ public abstract class ModLoaderShared<T extends Versioned> implements Versioned 
 		final List<ModInfo> unorderedMods = discoverMods(modDir);
 		
 		ModInstanceBuilder<T> entryBuilder = new ModInstanceBuilder<T>(modClass);
-		List<Entry> mods = new DependencyResolver<ModInfo>().provided(Collections.singleton(modLoaderProvided)).order(unorderedMods).stream().map(modInfo -> {
+		List<ModInfo> modInfoList = new DependencyResolver<ModInfo>().provided(Collections.singleton(modLoaderProvided)).order(unorderedMods);
+
+		// Prepare list of classpaths for mods that go into the shared classloader
+		List<Path> sharedPaths = modInfoList.stream().filter(mi -> mi.isSharedClassLoader() && mi.classPath() != null)
+				.flatMap(mi -> entryBuilder.getClassLoaderEntries(mi.getName(), mi.classPath()).stream()).collect(Collectors.toList());
+		HookManager.getInstance().addSharedClassPaths(sharedPaths);
+
+		List<Entry> mods = modInfoList.stream().map(modInfo -> {
 			try (EarlyLoadingChecker c = EarlyLoadingChecker.init(modInfo.getName(), "load")) {
 				modInfo.getProperties().put("steamVersion", steamVersion);
 				return new Entry(entryBuilder.createModInstance(modInfo), modInfo.getProperties(), modInfo.getName());

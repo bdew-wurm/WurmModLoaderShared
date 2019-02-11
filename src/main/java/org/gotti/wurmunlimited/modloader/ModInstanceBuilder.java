@@ -24,7 +24,6 @@ import java.util.logging.Logger;
 import org.gotti.wurmunlimited.modloader.classhooks.HookException;
 import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
 
-import javassist.ClassPool;
 import javassist.Loader;
 import javassist.NotFoundException;
 
@@ -54,28 +53,22 @@ class ModInstanceBuilder<T> {
 		}
 
 		try {
-			Loader loader = HookManager.getInstance().getLoader();
-			final String classpath = properties.getProperty("classpath");
+			ClassLoader loader = HookManager.getInstance().getSharedLoader();
+			final String classpath = entry.classPath();
 
-			final ClassLoader classloader;
-			if (classpath != null) {
-				final Boolean sharedClassLoader = Boolean.valueOf(properties.getProperty("sharedClassLoader", "false"));
+			if (classpath != null && !entry.isSharedClassLoader()) {
 				ClassLoader[] dependencies = entry.getImport().stream().map(classLoaders::get).filter(Objects::nonNull).toArray(ClassLoader[]::new);
-				classloader = createClassLoader(entry.getName(), classpath, loader, sharedClassLoader, dependencies);
-				if (!sharedClassLoader) {
-					classLoaders.put(entry.getName(), classloader);
-				}
-			} else {
-				classloader = loader;
+				loader = createClassLoader(entry.getName(), classpath, loader, dependencies);
+				classLoaders.put(entry.getName(), loader);
 			}
 
-			return classloader.loadClass(className).asSubclass(modClass).newInstance();
+			return loader.loadClass(className).asSubclass(modClass).newInstance();
 		} catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NotFoundException | MalformedURLException e) {
 			throw new HookException(e);
 		}
 	}
 
-	private List<Path> getClassLoaderEntries(String modname, String classpath) {
+	List<Path> getClassLoaderEntries(String modname, String classpath) {
 		List<Path> pathEntries = new ArrayList<>();
 
 		String[] entries = classpath.split(",");
@@ -115,34 +108,23 @@ class ModInstanceBuilder<T> {
 	 *            Classpath entries
 	 * @param loader
 	 *            Parent loader
-	 * @param shared
-	 *            Do we want a shared classloader?
 	 * @param dependencies
 	 *            Dependencies to import when NOT using a shared classloader
 	 * @return Classloader
 	 * @throws MalformedURLException
 	 * @throws NotFoundException
 	 */
-	private ClassLoader createClassLoader(String modname, String classpath, Loader loader, Boolean shared, ClassLoader... dependencies) throws MalformedURLException, NotFoundException {
+	private ClassLoader createClassLoader(String modname, String classpath, ClassLoader loader, ClassLoader... dependencies) throws MalformedURLException, NotFoundException {
 		List<Path> pathEntries = getClassLoaderEntries(modname, classpath);
 		logger.log(Level.INFO, "Classpath: " + pathEntries.toString());
-
-		if (shared) {
-			final ClassPool classPool = HookManager.getInstance().getClassPool();
-			for (Path path : pathEntries) {
-				classPool.appendClassPath(path.toString());
-			}
-			return loader;
-		} else {
-			List<URL> urls = new ArrayList<>();
-			for (Path path : pathEntries) {
-				urls.add(path.toUri().toURL());
-			}
-			ClassLoader parent = loader;
-			if (dependencies != null && dependencies.length > 0) {
-				parent = new JoinClassLoader(parent, dependencies);
-			}
-			return new URLClassLoader(urls.toArray(new URL[urls.size()]), parent);
+		List<URL> urls = new ArrayList<>();
+		for (Path path : pathEntries) {
+			urls.add(path.toUri().toURL());
 		}
+		ClassLoader parent = loader;
+		if (dependencies != null && dependencies.length > 0) {
+			parent = new JoinClassLoader(parent, dependencies);
+		}
+		return new URLClassLoader(urls.toArray(new URL[urls.size()]), parent);
 	}
 }

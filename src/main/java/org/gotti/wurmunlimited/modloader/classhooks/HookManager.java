@@ -7,11 +7,9 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.net.URLClassLoader;
+import java.nio.file.Path;
+import java.util.*;
 import java.util.jar.Attributes;
 import java.util.jar.Attributes.Name;
 import java.util.jar.Manifest;
@@ -19,6 +17,7 @@ import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.gotti.wurmunlimited.modloader.ParentLastURLClassLoader;
 import org.gotti.wurmunlimited.modloader.callbacks.Callbacks;
 
 import javassist.CannotCompileException;
@@ -37,6 +36,9 @@ public class HookManager {
 	// Javassist class loader
 	private Loader loader;
 
+	// main shared class loader (that can load vanilla classes + classes for mods that use it)
+	private ClassLoader sharedLoader;
+
 	// Invocation targets
 	private Map<String, InvocationTarget> invocationTargets = new HashMap<>();
 
@@ -50,7 +52,7 @@ public class HookManager {
 
 	private HookManager() {
 		classPool = ClassPool.getDefault();
-		loader = new Loader(classPool) {
+		sharedLoader = loader = new Loader(classPool) {
 			
 			@Override
 			protected Class<?> findClass(String name) throws ClassNotFoundException {
@@ -148,7 +150,7 @@ public class HookManager {
 				}
 			}
 		};
-		callbacks = new Callbacks(loader, classPool);
+		callbacks = new Callbacks(classPool);
 	}
 
 	public static synchronized HookManager getInstance() {
@@ -164,6 +166,10 @@ public class HookManager {
 
 	public Loader getLoader() {
 		return loader;
+	}
+
+	public ClassLoader getSharedLoader() {
+		return sharedLoader;
 	}
 
 	/**
@@ -365,5 +371,19 @@ public class HookManager {
 	
 	public void initCallbacks() {
 		callbacks.init();
+	}
+
+	public void addSharedClassPaths(List<Path> paths) {
+		List<URL> urls = new ArrayList<>();
+		for (Path path : paths) {
+			try {
+				classPool.appendClassPath(path.toString());
+				urls.add(path.toUri().toURL());
+			} catch (MalformedURLException | NotFoundException  e) {
+				LOG.warning(String.format("Bad path in shared class paths: %s (%s)", path, e.toString()));
+			}
+		}
+		sharedLoader = new ParentLastURLClassLoader(urls.toArray(new URL[urls.size()]), sharedLoader);
+		Thread.currentThread().setContextClassLoader(sharedLoader);
 	}
 }

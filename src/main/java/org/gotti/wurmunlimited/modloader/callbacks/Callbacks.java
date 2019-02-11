@@ -53,11 +53,9 @@ public class Callbacks {
 	
 	private final Map<String, CallbackInfo> callbackMap = new ConcurrentHashMap<>();
 	private final ClassPool classPool;
-	private final Loader loader;
-	
-	public Callbacks(Loader loader, ClassPool classPool) {
-		this.loader = loader;
-		this.classPool = classPool; 
+
+	public Callbacks(ClassPool classPool) {
+		this.classPool = classPool;
 	}
 	
 	@SuppressWarnings("unchecked")
@@ -79,7 +77,7 @@ public class Callbacks {
 	 */
 	private Object initializeProxy(CtClass proxy, CtField targetField, Map<String, CtMethod> methods, Object callbackTarget) {
 		try {
-			Class<?> proxyClass = proxy.toClass();
+			Class<?> proxyClass = toClass(proxy);
 			Object proxyInstance = proxyClass.newInstance();
 			
 			for (Map.Entry<String, CtMethod> entry : methods.entrySet()) {
@@ -163,7 +161,7 @@ public class Callbacks {
 			} else if (ctClass.isArray()) {
 				return Class.forName(Descriptor.toJavaName(Descriptor.of(ctClass)));
 			} else {
-				return loader.loadClass(ctClass.getName());
+				return HookManager.getInstance().getSharedLoader().loadClass(ctClass.getName());
 			}
 		} catch (ClassNotFoundException e) {
 			throw new HookException(e);
